@@ -33,7 +33,7 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Merge upstream
@@ -42,6 +42,8 @@ jobs:
           NAME: nebelbild
           EMAIL: gjwbqwsh74@gmail.com
           REPO_FORK: https://github.com/RunanywhereAI/runanywhere-sdks.git
+          TARGET_BRANCH: ${{ github.event.repository.default_branch }}
+          UPSTREAM_BRANCH: main
         # 追従処理
         run: |
           set -euo pipefail
@@ -60,28 +62,28 @@ jobs:
           git remote add upstream "${REPO_FORK}" || git remote set-url upstream "${REPO_FORK}"
           
           : # upstream のブランチをローカルに取得
-          git fetch upstream main
+          git fetch upstream "${UPSTREAM_BRANCH}"
           
           : # main ブランチの変更をマージし、clone 元の main に push
           : # コンフリクト時は失敗扱いにせず、次回実行で再試行する
           : # ブランチ名を main などに変更していたり、別のブランチにしている場合は注意
 
-          git checkout main
+          git checkout "${TARGET_BRANCH}"
 
-          if git merge-base --is-ancestor upstream/main main; then
-            echo "Already up to date with upstream/main"
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" "${TARGET_BRANCH}"; then
+            echo "Already up to date with upstream/${UPSTREAM_BRANCH}"
             exit 0
           fi
 
-          if ! git merge --no-edit upstream/main; then
+          if ! git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
             git merge --abort || true
             echo "::warning::Merge conflict detected. Skipping this run; resolve conflicts manually or wait for next run."
             exit 0
           fi
 
           : # race condition で push が失敗するケースに備えて1回だけrebaseして再push
-          if ! git push origin main; then
+          if ! git push origin "${TARGET_BRANCH}"; then
             echo "Push failed. Retrying once after rebase..."
-            git pull --rebase origin main
-            git push origin main
+            git pull --rebase origin "${TARGET_BRANCH}"
+            git push origin "${TARGET_BRANCH}"
           fi
